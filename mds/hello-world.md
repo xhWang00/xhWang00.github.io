@@ -1,7 +1,6 @@
 ---
 title: Hello World
 date: 2025-01-15
-tags: [meta, introduction]
 ---
 
 This is my first blog post using the static site generator.

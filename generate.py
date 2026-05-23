@@ -73,12 +73,10 @@ def read_md_files():
                 post_date = datetime.fromtimestamp(os.path.getmtime(fpath))
         else:
             post_date = datetime.fromtimestamp(os.path.getmtime(fpath))
-        tags = meta.get("tags", [])
         posts.append({
             "slug": slug_from_filename(fname),
             "title": title,
             "date": post_date,
-            "tags": tags if isinstance(tags, list) else [],
             "body": body,
         })
     posts.sort(key=lambda p: p["date"], reverse=True)
@@ -87,19 +85,11 @@ def read_md_files():
 
 def render_post_html(post, html_body, css_path):
     date_str = post["date"].strftime("%B %d, %Y")
-    tags_html = ""
-    if post["tags"]:
-        tag_links = "".join(
-            f'<a class="tag" href="/">{html.escape(t)}</a>'
-            for t in post["tags"]
-        )
-        tags_html = f'<div class="tags">{tag_links}</div>'
 
     content = f"""
 <article class="article-header">
   <h1>{html.escape(post["title"])}</h1>
   <p class="post-date">{date_str}</p>
-  {tags_html}
 </article>
 <div class="article-body">
 {html_body}
@@ -113,19 +103,11 @@ def render_index_page(posts, page_num, total_pages, css_path):
         html_body = md_to_html(p["body"])
         excerpt = extract_excerpt(html_body)
         date_str = p["date"].strftime("%B %d, %Y")
-        tags_html = ""
-        if p["tags"]:
-            tag_links = "".join(
-                f'<a class="tag" href="/">{html.escape(t)}</a>'
-                for t in p["tags"]
-            )
-            tags_html = f'<div class="tags">{tag_links}</div>'
         safe_title = html.escape(p["title"])
         cards.append(f"""<div class="post-card">
   <h2><a href="/posts/{p["slug"]}.html">{safe_title}</a></h2>
   <p class="post-date">{date_str}</p>
   <div class="post-excerpt"><p>{excerpt}</p></div>
-  {tags_html}
 </div>""")
 
     pagination = ""

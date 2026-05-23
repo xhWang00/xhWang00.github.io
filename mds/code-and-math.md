@@ -1,7 +1,6 @@
 ---
 title: Code & Math Examples
 date: 2025-03-20
-tags: [python, math]
 ---
 
 A post with various code and math examples.
