@@ -130,7 +130,7 @@ def render_index_page(posts, page_num, total_pages, css_path):
     content = f"""
 {"".join(cards)}
 {pagination}"""
-    return wrap_html("My Blog", content.strip(), css_path)
+    return wrap_html("xhWang00's Blog", content.strip(), css_path)
 
 
 def wrap_html(title, body, css_path):
