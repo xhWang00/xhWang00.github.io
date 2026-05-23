@@ -155,8 +155,6 @@ img {
 }
 
 .article-body pre {
-  border: 2px solid #000;
-  background: #f4f4f4;
   padding: 1rem;
   margin-bottom: 1rem;
   overflow-x: auto;
@@ -211,19 +209,15 @@ img {
 .codehilite .kt { color: #902000; }
 .codehilite .m { color: #177500; }
 .codehilite .s { color: #C41A16; }
-.codehilite .na { color: #000; }
-.codehilite .nb { color: #000; }
 .codehilite .nc { color: #000; font-weight: bold; }
-.codehilite .no { color: #000; }
-.codehilite .nd { color: #000; font-weight: bold; }
 .codehilite .ni { color: #000; }
-.codehilite .ne { color: #000; font-weight: bold; }
-.codehilite .nf { color: #000; }
-.codehilite .nl { color: #000; }
-.codehilite .nn { color: #000; font-weight: bold; }
-.codehilite .nt { color: #000; font-weight: bold; }
-.codehilite .nv { color: #000; }
-.codehilite .ow { color: #000; font-weight: bold; }
+.codehilite .na, .codehilite .nb, .codehilite .no, .codehilite .ne, .codehilite .nf,
+.codehilite .nl, .codehilite .nn, .codehilite .nt, .codehilite .nv, .codehilite .ow {
+  color: #000;
+}
+.codehilite .nd, .codehilite .ne, .codehilite .nn, .codehilite .nt, .codehilite .ow {
+  font-weight: bold;
+}
 .codehilite .w { color: #bbb; }
 .codehilite .mf { color: #177500; }
 .codehilite .mh { color: #177500; }
