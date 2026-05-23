@@ -1,6 +1,6 @@
+import html
 import os
 import re
-import shutil
 from datetime import date, datetime
 
 import markdown
@@ -33,7 +33,7 @@ def parse_front_matter(content):
 
 
 def slug_from_filename(filename):
-    return os.path.splitext(filename)[0]
+    return os.path.splitext(os.path.basename(filename))[0]
 
 
 def extract_excerpt(html):
@@ -90,21 +90,22 @@ def render_post_html(post, html_body):
     tags_html = ""
     if post["tags"]:
         tag_links = "".join(
-            f'<a class="tag" href="/">{t}</a>'
+            f'<a class="tag" href="/">{html.escape(t)}</a>'
             for t in post["tags"]
         )
         tags_html = f'<div class="tags">{tag_links}</div>'
 
+    safe_title = html.escape(post["title"])
     content = f"""
 <article class="article-header">
-  <h1>{post["title"]}</h1>
+  <h1>{safe_title}</h1>
   <p class="post-date">{date_str}</p>
   {tags_html}
 </article>
 <div class="article-body">
 {html_body}
 </div>"""
-    return wrap_html(post["title"], content.strip())
+    return wrap_html(safe_title, content.strip())
 
 
 def render_index_page(posts, page_num, total_pages):
@@ -116,12 +117,13 @@ def render_index_page(posts, page_num, total_pages):
         tags_html = ""
         if p["tags"]:
             tag_links = "".join(
-                f'<a class="tag" href="/">{t}</a>'
+                f'<a class="tag" href="/">{html.escape(t)}</a>'
                 for t in p["tags"]
             )
             tags_html = f'<div class="tags">{tag_links}</div>'
+        safe_title = html.escape(p["title"])
         cards.append(f"""<div class="post-card">
-  <h2><a href="/posts/{p["slug"]}.html">{p["title"]}</a></h2>
+  <h2><a href="/posts/{p["slug"]}.html">{safe_title}</a></h2>
   <p class="post-date">{date_str}</p>
   <div class="post-excerpt"><p>{excerpt}</p></div>
   {tags_html}
@@ -152,12 +154,13 @@ def render_index_page(posts, page_num, total_pages):
 
 
 def wrap_html(title, body):
+    safe_title = html.escape(title)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{title}</title>
+  <title>{safe_title}</title>
   <link rel="stylesheet" href="/style.css">
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
 </head>
