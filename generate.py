@@ -85,7 +85,7 @@ def read_md_files():
     return posts
 
 
-def render_post_html(post, html_body):
+def render_post_html(post, html_body, css_path):
     date_str = post["date"].strftime("%B %d, %Y")
     tags_html = ""
     if post["tags"]:
@@ -104,10 +104,10 @@ def render_post_html(post, html_body):
 <div class="article-body">
 {html_body}
 </div>"""
-    return wrap_html(post["title"], content.strip())
+    return wrap_html(post["title"], content.strip(), css_path)
 
 
-def render_index_page(posts, page_num, total_pages):
+def render_index_page(posts, page_num, total_pages, css_path):
     cards = []
     for p in posts:
         html_body = md_to_html(p["body"])
@@ -149,10 +149,10 @@ def render_index_page(posts, page_num, total_pages):
 <h1>My Blog</h1>
 {"".join(cards)}
 {pagination}"""
-    return wrap_html("My Blog", content.strip())
+    return wrap_html("My Blog", content.strip(), css_path)
 
 
-def wrap_html(title, body):
+def wrap_html(title, body, css_path):
     safe_title = html.escape(title)
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -160,7 +160,7 @@ def wrap_html(title, body):
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{safe_title}</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="{css_path}">
   <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
 </head>
 <body>
@@ -187,7 +187,7 @@ def build():
 
     for p in posts:
         html_body = md_to_html(p["body"])
-        html = render_post_html(p, html_body)
+        html = render_post_html(p, html_body, "../style.css")
         out_path = os.path.join(POSTS_DIR, f"{p['slug']}.html")
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(html)
@@ -198,12 +198,14 @@ def build():
         start = (page - 1) * POSTS_PER_PAGE
         end = start + POSTS_PER_PAGE
         page_posts = posts[start:end]
-        html = render_index_page(page_posts, page, total_pages)
         if page == 1:
+            css_path = "style.css"
             out_path = "index.html"
         else:
+            css_path = "../style.css"
             os.makedirs(INDICES_DIR, exist_ok=True)
             out_path = os.path.join(INDICES_DIR, f"index{page}.html")
+        html = render_index_page(page_posts, page, total_pages, css_path)
         with open(out_path, "w", encoding="utf-8") as f:
             f.write(html)
         print(f"  Generated: {out_path}")
