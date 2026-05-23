@@ -128,7 +128,6 @@ def render_index_page(posts, page_num, total_pages, css_path):
 </div>"""
 
     content = f"""
-<h1>My Blog</h1>
 {"".join(cards)}
 {pagination}"""
     return wrap_html("My Blog", content.strip(), css_path)
@@ -147,13 +146,13 @@ def wrap_html(title, body, css_path):
 </head>
 <body>
   <header class="site-header">
-    <a class="site-title" href="/">My Blog</a>
+    <a class="site-title" href="/">xhWang00's Blog</a>
   </header>
   <main class="content">
 {body}
   </main>
   <footer class="site-footer">
-    <p>&copy; {datetime.now().year}</p>
+    <p>&copy; {datetime.now().year} - xhWang00</p>
   </footer>
 </body>
 </html>"""
