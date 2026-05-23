@@ -59,7 +59,7 @@ A single-file Python static site generator that reads Markdown files from `mds/`
 </head>
 <body>
   <header class="site-header">
-    <a class="site-title" href="/">My Blog</a>
+    <a class="site-title" href="/">Back to home</a>
   </header>
   <main class="content">{content}</main>
   <footer class="site-footer"><p>&copy; {year}</p></footer>
@@ -68,7 +68,8 @@ A single-file Python static site generator that reads Markdown files from `mds/`
 ```
 
 ## CSS Design (Brutalism)
-- System font stack: `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
+- System font stack: `-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "Microsoft YaHei", "PingFang SC", sans-serif`
+  (Covers macOS/iOS, Windows, and Linux CJK fonts)
 - No external fonts
 - Cards bordered with `2px solid #000`
 - `border-radius: 0` everywhere
