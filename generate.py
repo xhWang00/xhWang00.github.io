@@ -95,17 +95,16 @@ def render_post_html(post, html_body):
         )
         tags_html = f'<div class="tags">{tag_links}</div>'
 
-    safe_title = html.escape(post["title"])
     content = f"""
 <article class="article-header">
-  <h1>{safe_title}</h1>
+  <h1>{html.escape(post["title"])}</h1>
   <p class="post-date">{date_str}</p>
   {tags_html}
 </article>
 <div class="article-body">
 {html_body}
 </div>"""
-    return wrap_html(safe_title, content.strip())
+    return wrap_html(post["title"], content.strip())
 
 
 def render_index_page(posts, page_num, total_pages):
