@@ -32,6 +32,24 @@ img {
   border: 2px solid #000;
 }
 
+table {
+    border-top: 4px solid #000; 
+    border-bottom: 4px solid #000;
+    margin-left: auto;
+    margin-right: auto;
+    background-color: #fff;
+  }
+
+tr, th, td {
+  border: none;
+  padding: 0.5em 1em;
+  background-color: #fff;
+}
+
+th {
+  border-bottom: 1px solid #000;
+}
+
 /* Layout */
 .site-header {
   max-width: 800px;

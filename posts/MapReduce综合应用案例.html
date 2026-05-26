@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MapReduce综合应用案例</title>
+  <link rel="stylesheet" href="../style.css">
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="site-title" href="/">xhWang00's Blog</a>
+  </header>
+  <main class="content">
+<article class="article-header">
+  <h1>MapReduce综合应用案例</h1>
+  <p class="post-date">May 26, 2025</p>
+</article>
+<div class="article-body">
+<h1 id="mapreduce">MapReduce综合应用案例</h1>
+<p>大数据技术2026学年第一学期，实验6参考笔记</p>
+<h2 id="61-mapreduce">6.1 MapReduce综合应用案例 — 电信数据清洗</h2>
+<h3 id="longmrjava">LongMR.java</h3>
+<div class="codehilite"><pre><span></span><code><span class="kn">package</span><span class="w"> </span><span class="nn">com</span><span class="p">;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.io.IOException</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.sql.Connection</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.sql.ResultSet</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.sql.SQLException</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.sql.Statement</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.text.SimpleDateFormat</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.util.HashMap</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.util.Map</span><span class="p">;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.conf.Configuration</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.fs.FileSystem</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.fs.Path</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.io.LongWritable</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.io.NullWritable</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.io.Text</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.mapreduce.Job</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.mapreduce.Mapper</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.mapreduce.lib.input.FileInputFormat</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.mapreduce.lib.output.FileOutputFormat</span><span class="p">;</span>
+
+<span class="cm">/**MapReduce操作类*/</span>
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">LogMR</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 定义 HDFS 输入源和输出目的地路径</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">INPUT_PATH</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;/user/test/input/a.txt&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">OUTPUT_PATH</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;/user/test/output&quot;</span><span class="p">;</span>
+
+<span class="w">    </span><span class="cm">/**</span>
+<span class="cm">     * Mapper 类：负责读取 HDFS 文本并结合 MySQL 缓存进行数据清洗</span>
+<span class="cm">     */</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">class</span> <span class="nc">CleanMapper</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">Mapper</span><span class="o">&lt;</span><span class="n">LongWritable</span><span class="p">,</span><span class="w"> </span><span class="n">Text</span><span class="p">,</span><span class="w"> </span><span class="n">Text</span><span class="p">,</span><span class="w"> </span><span class="n">NullWritable</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="c1">// 内存缓存：用于存放从 MySQL 中预加载的数据</span>
+<span class="w">        </span><span class="kd">private</span><span class="w"> </span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">userMap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+<span class="w">        </span><span class="kd">private</span><span class="w"> </span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">regionMap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span>
+<span class="w">        </span><span class="c1">// 时间格式化工具</span>
+<span class="w">        </span><span class="kd">private</span><span class="w"> </span><span class="n">SimpleDateFormat</span><span class="w"> </span><span class="n">sdf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">SimpleDateFormat</span><span class="p">(</span><span class="s">&quot;yyyy-MM-dd HH:mm:ss&quot;</span><span class="p">);</span>
+
+<span class="w">        </span><span class="cm">/**</span>
+<span class="cm">         * setup 方法在 map 任务启动时最先执行一次</span>
+<span class="cm">         * 在这里连接 MySQL 数据库，将数据加载到 Map 集合中</span>
+<span class="cm">         */</span>
+<span class="w">        </span><span class="nd">@Override</span>
+<span class="w">        </span><span class="kd">protected</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">(</span><span class="n">Context</span><span class="w"> </span><span class="n">context</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">IOException</span><span class="p">,</span><span class="w"> </span><span class="n">InterruptedException</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">Connection</span><span class="w"> </span><span class="n">conn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<span class="w">            </span><span class="n">Statement</span><span class="w"> </span><span class="n">stmt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<span class="w">            </span><span class="n">ResultSet</span><span class="w"> </span><span class="n">rsUser</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<span class="w">            </span><span class="n">ResultSet</span><span class="w"> </span><span class="n">rsRegion</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<span class="w">            </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="c1">// 注册并加载 MySQL 驱动</span>
+<span class="w">                </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="s">&quot;com.mysql.jdbc.Driver&quot;</span><span class="p">);</span>
+<span class="w">                </span><span class="c1">// 建立连接</span>
+<span class="w">                </span><span class="n">conn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">java</span><span class="p">.</span><span class="na">sql</span><span class="p">.</span><span class="na">DriverManager</span><span class="p">.</span><span class="na">getConnection</span><span class="p">(</span>
+<span class="w">                    </span><span class="s">&quot;jdbc:mysql://localhost:3306/mydb?useUnicode=true&amp;characterEncoding=utf8&quot;</span><span class="p">,</span><span class="w"> </span>
+<span class="w">                    </span><span class="s">&quot;root&quot;</span><span class="p">,</span><span class="w"> </span>
+<span class="w">                    </span><span class="s">&quot;123123&quot;</span>
+<span class="w">                </span><span class="p">);</span>
+<span class="w">                </span><span class="n">stmt</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">conn</span><span class="p">.</span><span class="na">createStatement</span><span class="p">();</span>
+
+<span class="w">                </span><span class="c1">// 1. 预加载用户手机号与真实姓名的映射</span>
+<span class="w">                </span><span class="n">rsUser</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stmt</span><span class="p">.</span><span class="na">executeQuery</span><span class="p">(</span><span class="s">&quot;select phone, trueName from userphone&quot;</span><span class="p">);</span>
+<span class="w">                </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">rsUser</span><span class="p">.</span><span class="na">next</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                    </span><span class="n">String</span><span class="w"> </span><span class="n">phone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rsUser</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;phone&quot;</span><span class="p">);</span>
+<span class="w">                    </span><span class="n">String</span><span class="w"> </span><span class="n">trueName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rsUser</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;trueName&quot;</span><span class="p">);</span>
+<span class="w">                    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">phone</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">trueName</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                        </span><span class="n">userMap</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="n">phone</span><span class="p">,</span><span class="w"> </span><span class="n">trueName</span><span class="p">);</span>
+<span class="w">                    </span><span class="p">}</span>
+<span class="w">                </span><span class="p">}</span>
+
+<span class="w">                </span><span class="c1">// 2. 预加载省份编码与省份名称的映射</span>
+<span class="w">                </span><span class="n">rsRegion</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">stmt</span><span class="p">.</span><span class="na">executeQuery</span><span class="p">(</span><span class="s">&quot;select CodeNum, Address from allregion&quot;</span><span class="p">);</span>
+<span class="w">                </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">rsRegion</span><span class="p">.</span><span class="na">next</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                    </span><span class="n">String</span><span class="w"> </span><span class="n">codeNum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rsRegion</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;CodeNum&quot;</span><span class="p">);</span>
+<span class="w">                    </span><span class="n">String</span><span class="w"> </span><span class="n">address</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">rsRegion</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;Address&quot;</span><span class="p">);</span>
+<span class="w">                    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">codeNum</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="n">address</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                        </span><span class="n">regionMap</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="n">codeNum</span><span class="p">,</span><span class="w"> </span><span class="n">address</span><span class="p">);</span>
+<span class="w">                    </span><span class="p">}</span>
+<span class="w">                </span><span class="p">}</span>
+<span class="w">            </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">e</span><span class="p">.</span><span class="na">printStackTrace</span><span class="p">();</span>
+<span class="w">            </span><span class="p">}</span><span class="w"> </span><span class="k">finally</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="c1">// 关闭数据库连接资源，释放内存</span>
+<span class="w">                </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">rsUser</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="n">rsUser</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">SQLException</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{}</span>
+<span class="w">                </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">rsRegion</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="n">rsRegion</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">SQLException</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{}</span>
+<span class="w">                </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">stmt</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="n">stmt</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">SQLException</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{}</span>
+<span class="w">                </span><span class="k">try</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">conn</span><span class="w"> </span><span class="o">!=</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="n">conn</span><span class="p">.</span><span class="na">close</span><span class="p">();</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">SQLException</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{}</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="cm">/**</span>
+<span class="cm">         * map 方法对文件的每一行进行清洗转换</span>
+<span class="cm">         */</span>
+<span class="w">        </span><span class="nd">@Override</span>
+<span class="w">        </span><span class="kd">protected</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">map</span><span class="p">(</span><span class="n">LongWritable</span><span class="w"> </span><span class="n">key</span><span class="p">,</span><span class="w"> </span><span class="n">Text</span><span class="w"> </span><span class="n">value</span><span class="p">,</span><span class="w"> </span><span class="n">Context</span><span class="w"> </span><span class="n">context</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">IOException</span><span class="p">,</span><span class="w"> </span><span class="n">InterruptedException</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="c1">// 将一行文本转换为字符串并去除首尾空格</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">line</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">value</span><span class="p">.</span><span class="na">toString</span><span class="p">().</span><span class="na">trim</span><span class="p">();</span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">line</span><span class="p">.</span><span class="na">isEmpty</span><span class="p">())</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+
+<span class="w">            </span><span class="c1">// 切分数据</span>
+<span class="w">            </span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">fields</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">line</span><span class="p">.</span><span class="na">split</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">);</span>
+<span class="w">            </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">fields</span><span class="p">.</span><span class="na">length</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">6</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+
+<span class="w">            </span><span class="c1">// 提取原始字段数据</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">callerPhone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fields</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span><span class="p">;</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">receiverPhone</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fields</span><span class="o">[</span><span class="mi">1</span><span class="o">]</span><span class="p">;</span>
+<span class="w">            </span><span class="kt">long</span><span class="w"> </span><span class="n">startTimeSec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Long</span><span class="p">.</span><span class="na">parseLong</span><span class="p">(</span><span class="n">fields</span><span class="o">[</span><span class="mi">2</span><span class="o">]</span><span class="p">);</span>
+<span class="w">            </span><span class="kt">long</span><span class="w"> </span><span class="n">endTimeSec</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Long</span><span class="p">.</span><span class="na">parseLong</span><span class="p">(</span><span class="n">fields</span><span class="o">[</span><span class="mi">3</span><span class="o">]</span><span class="p">);</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">callerRegionCode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fields</span><span class="o">[</span><span class="mi">4</span><span class="o">]</span><span class="p">;</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">receiverRegionCode</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fields</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span><span class="p">;</span>
+
+<span class="w">            </span><span class="c1">// 1. 关联真实姓名 (若在缓存中未找到则保留原样或标记未知)</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">callerName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">userMap</span><span class="p">.</span><span class="na">getOrDefault</span><span class="p">(</span><span class="n">callerPhone</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;未知&quot;</span><span class="p">);</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">receiverName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">userMap</span><span class="p">.</span><span class="na">getOrDefault</span><span class="p">(</span><span class="n">receiverPhone</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;未知&quot;</span><span class="p">);</span>
+
+<span class="w">            </span><span class="c1">// 2. 转换时间戳格式 (秒级时间戳需要乘以 1000L 转换为毫秒)</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">startTimeStr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sdf</span><span class="p">.</span><span class="na">format</span><span class="p">(</span><span class="n">startTimeSec</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000L</span><span class="p">);</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">endTimeStr</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">sdf</span><span class="p">.</span><span class="na">format</span><span class="p">(</span><span class="n">endTimeSec</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">1000L</span><span class="p">);</span>
+
+<span class="w">            </span><span class="c1">// 3. 计算通话时长 (秒)</span>
+<span class="w">            </span><span class="kt">long</span><span class="w"> </span><span class="n">duration</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">endTimeSec</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">startTimeSec</span><span class="p">;</span>
+
+<span class="w">            </span><span class="c1">// 4. 关联省份名称</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">callerAddress</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">regionMap</span><span class="p">.</span><span class="na">getOrDefault</span><span class="p">(</span><span class="n">callerRegionCode</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;未知省份&quot;</span><span class="p">);</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">receiverAddress</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">regionMap</span><span class="p">.</span><span class="na">getOrDefault</span><span class="p">(</span><span class="n">receiverRegionCode</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;未知省份&quot;</span><span class="p">);</span>
+
+<span class="w">            </span><span class="c1">// 5. 按照目标格式拼接字符串数据</span>
+<span class="w">            </span><span class="n">StringBuilder</span><span class="w"> </span><span class="n">sb</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">StringBuilder</span><span class="p">();</span>
+<span class="w">            </span><span class="n">sb</span><span class="p">.</span><span class="na">append</span><span class="p">(</span><span class="n">callerName</span><span class="p">).</span><span class="na">append</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">)</span>
+<span class="w">              </span><span class="p">.</span><span class="na">append</span><span class="p">(</span><span class="n">receiverName</span><span class="p">).</span><span class="na">append</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">)</span>
+<span class="w">              </span><span class="p">.</span><span class="na">append</span><span class="p">(</span><span class="n">callerPhone</span><span class="p">).</span><span class="na">append</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">)</span>
+<span class="w">              </span><span class="p">.</span><span class="na">append</span><span class="p">(</span><span class="n">receiverPhone</span><span class="p">).</span><span class="na">append</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">)</span>
+<span class="w">              </span><span class="p">.</span><span class="na">append</span><span class="p">(</span><span class="n">startTimeStr</span><span class="p">).</span><span class="na">append</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">)</span>
+<span class="w">              </span><span class="p">.</span><span class="na">append</span><span class="p">(</span><span class="n">endTimeStr</span><span class="p">).</span><span class="na">append</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">)</span>
+<span class="w">              </span><span class="p">.</span><span class="na">append</span><span class="p">(</span><span class="n">duration</span><span class="p">).</span><span class="na">append</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">)</span>
+<span class="w">              </span><span class="p">.</span><span class="na">append</span><span class="p">(</span><span class="n">callerAddress</span><span class="p">).</span><span class="na">append</span><span class="p">(</span><span class="s">&quot;,&quot;</span><span class="p">)</span>
+<span class="w">              </span><span class="p">.</span><span class="na">append</span><span class="p">(</span><span class="n">receiverAddress</span><span class="p">);</span>
+
+<span class="w">            </span><span class="c1">// 输出清洗后的整行文本</span>
+<span class="w">            </span><span class="n">context</span><span class="p">.</span><span class="na">write</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">Text</span><span class="p">(</span><span class="n">sb</span><span class="p">.</span><span class="na">toString</span><span class="p">()),</span><span class="w"> </span><span class="n">NullWritable</span><span class="p">.</span><span class="na">get</span><span class="p">());</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+
+<span class="w">    </span><span class="cm">/**</span>
+<span class="cm">     * Driver 驱动方法：配置并提交 MapReduce 任务</span>
+<span class="cm">     */</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">Configuration</span><span class="w"> </span><span class="n">conf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Configuration</span><span class="p">();</span>
+<span class="w">        </span><span class="n">Job</span><span class="w"> </span><span class="n">job</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Job</span><span class="p">.</span><span class="na">getInstance</span><span class="p">(</span><span class="n">conf</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;Log Clean Job&quot;</span><span class="p">);</span>
+
+<span class="w">        </span><span class="n">job</span><span class="p">.</span><span class="na">setJarByClass</span><span class="p">(</span><span class="n">LogMR</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="w">        </span><span class="n">job</span><span class="p">.</span><span class="na">setMapperClass</span><span class="p">(</span><span class="n">CleanMapper</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 数据清洗场景不需要 Reduce 聚合阶段，直接设置 Reduce 任务数为 0 提高效率</span>
+<span class="w">        </span><span class="n">job</span><span class="p">.</span><span class="na">setNumReduceTasks</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 设置输出数据的 Key 和 Value 的 Class 类型</span>
+<span class="w">        </span><span class="n">job</span><span class="p">.</span><span class="na">setOutputKeyClass</span><span class="p">(</span><span class="n">Text</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="w">        </span><span class="n">job</span><span class="p">.</span><span class="na">setOutputValueClass</span><span class="p">(</span><span class="n">NullWritable</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+
+<span class="w">        </span><span class="n">Path</span><span class="w"> </span><span class="n">inputPath</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Path</span><span class="p">(</span><span class="n">INPUT_PATH</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Path</span><span class="w"> </span><span class="n">outputPath</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Path</span><span class="p">(</span><span class="n">OUTPUT_PATH</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 检查 HDFS 上输出路径是否存在，若存在则提前删除，防止报错</span>
+<span class="w">        </span><span class="n">FileSystem</span><span class="w"> </span><span class="n">fs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">FileSystem</span><span class="p">.</span><span class="na">get</span><span class="p">(</span><span class="n">conf</span><span class="p">);</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">fs</span><span class="p">.</span><span class="na">exists</span><span class="p">(</span><span class="n">outputPath</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">fs</span><span class="p">.</span><span class="na">delete</span><span class="p">(</span><span class="n">outputPath</span><span class="p">,</span><span class="w"> </span><span class="kc">true</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="c1">// 设置输入输出的 HDFS 文件路径</span>
+<span class="w">        </span><span class="n">FileInputFormat</span><span class="p">.</span><span class="na">addInputPath</span><span class="p">(</span><span class="n">job</span><span class="p">,</span><span class="w"> </span><span class="n">inputPath</span><span class="p">);</span>
+<span class="w">        </span><span class="n">FileOutputFormat</span><span class="p">.</span><span class="na">setOutputPath</span><span class="p">(</span><span class="n">job</span><span class="p">,</span><span class="w"> </span><span class="n">outputPath</span><span class="p">);</span>
+
+<span class="w">        </span><span class="c1">// 提交作业并等待执行结束</span>
+<span class="w">        </span><span class="n">System</span><span class="p">.</span><span class="na">exit</span><span class="p">(</span><span class="n">job</span><span class="p">.</span><span class="na">waitForCompletion</span><span class="p">(</span><span class="kc">true</span><span class="p">)</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>代码说明：</strong><br>
+<code>LogMR</code> 是一个只有 Mapper 阶段的 MapReduce 程序，负责将 HDFS 的原始通话记录与 MySQL 中的用户/地区信息进行关联清洗。  </p>
+<ol>
+<li><strong><code>CleanMapper.setup()</code></strong> — Map 任务启动时执行一次：通过 JDBC 连接 MySQL，将 <code>userphone</code> 表（手机号 → 真实姓名）和 <code>allregion</code> 表（编码 → 省份名称）全部加载到内存的 <code>HashMap</code> 中，然后关闭连接。  </li>
+<li><strong><code>CleanMapper.map()</code></strong> — 对输入文件的每一行依次执行：<br>
+   - 按逗号切分，提取主叫/被叫手机号、开始/结束时间戳、地区编码；<br>
+   - 从 <code>userMap</code> 缓存查询真实姓名（未找到则标记为"未知"）；<br>
+   - 将秒级时间戳转为毫秒，格式化为 <code>yyyy-MM-dd HH:mm:ss</code>；<br>
+   - 计算通话时长（结束时间 − 开始时间）；<br>
+   - 从 <code>regionMap</code> 缓存查询省份名称；<br>
+   - 拼接为逗号分隔的清洗后文本并输出。  </li>
+<li><strong><code>main()</code></strong> — 配置 Job：设置 Mapper 为 <code>CleanMapper</code>，Reduce 任务数为 0（纯清洗无需聚合），自动清理输出目录，提交任务等待完成。  </li>
+</ol>
+<hr>
+<h2 id="62-mapreduce">6.2 MapReduce综合应用案例 — 招聘数据清洗</h2>
+<h3 id="dbhelperjava">DBHelper.java</h3>
+<div class="codehilite"><pre><span></span><code><span class="kn">package</span><span class="w"> </span><span class="nn">com</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.sql.Connection</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.sql.DriverManager</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.sql.SQLException</span><span class="p">;</span>
+
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">DBHelper</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="cm">/********** begin **********/</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">driver</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;com.mysql.jdbc.Driver&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;jdbc:mysql://localhost:3306/mydb?useUnicode=true&amp;characterEncoding=UTF-8&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">username</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;root&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">String</span><span class="w"> </span><span class="n">password</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;123123&quot;</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="n">Connection</span><span class="w"> </span><span class="n">conn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">static</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">Class</span><span class="p">.</span><span class="na">forName</span><span class="p">(</span><span class="n">driver</span><span class="p">);</span>
+<span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">Exception</span><span class="w"> </span><span class="n">ex</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">ex</span><span class="p">.</span><span class="na">printStackTrace</span><span class="p">();</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="n">Connection</span><span class="w"> </span><span class="nf">getConnection</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">conn</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="kc">null</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">conn</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">DriverManager</span><span class="p">.</span><span class="na">getConnection</span><span class="p">(</span><span class="n">url</span><span class="p">,</span><span class="w"> </span><span class="n">username</span><span class="p">,</span><span class="w"> </span><span class="n">password</span><span class="p">);</span>
+<span class="w">            </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">SQLException</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">e</span><span class="p">.</span><span class="na">printStackTrace</span><span class="p">();</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">            </span><span class="k">return</span><span class="w"> </span><span class="n">conn</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="k">return</span><span class="w"> </span><span class="n">conn</span><span class="p">;</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">Connection</span><span class="w"> </span><span class="n">connection</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">DBHelper</span><span class="p">.</span><span class="na">getConnection</span><span class="p">();</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="cm">/********** end **********/</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>代码说明：</strong><br>
+<code>DBHelper</code> 是一个 MySQL 数据库连接工具类，采用单例模式管理连接对象。  </p>
+<ol>
+<li><strong>静态代码块</strong> — 类加载时通过 <code>Class.forName()</code> 注册 MySQL JDBC 驱动。  </li>
+<li><strong><code>getConnection()</code></strong> — 如果 <code>conn</code> 为 null 则创建新连接，否则直接返回已有连接，避免重复创建数据库连接，提高资源利用率。  </li>
+</ol>
+<h3 id="jsonmapjava">JsonMap.java</h3>
+<div class="codehilite"><pre><span></span><code><span class="kn">package</span><span class="w"> </span><span class="nn">com</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">com.alibaba.fastjson.JSONObject</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.hbase.client.Put</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.io.LongWritable</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.io.NullWritable</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.io.Text</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.mapreduce.Mapper</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.io.IOException</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.sql.Connection</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.sql.ResultSet</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.sql.SQLException</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.sql.Statement</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.util.HashMap</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">java.util.Map</span><span class="p">;</span>
+
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">JsonMap</span><span class="w">  </span><span class="kd">extends</span><span class="w"> </span><span class="n">Mapper</span><span class="o">&lt;</span><span class="n">LongWritable</span><span class="p">,</span><span class="w"> </span><span class="n">Text</span><span class="p">,</span><span class="w"> </span><span class="n">NullWritable</span><span class="p">,</span><span class="w"> </span><span class="n">Put</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+
+<span class="w">    </span><span class="cm">/********** begin **********/</span>
+<span class="w">    </span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">pro</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">String</span><span class="o">&gt;</span><span class="p">();</span>
+<span class="w">    </span><span class="n">Put</span><span class="w"> </span><span class="n">put</span><span class="p">;</span>
+<span class="w">    </span><span class="nd">@Override</span>
+<span class="w">    </span><span class="kd">protected</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">(</span><span class="n">Context</span><span class="w"> </span><span class="n">context</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">IOException</span><span class="p">,</span><span class="w"> </span><span class="n">InterruptedException</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">Connection</span><span class="w"> </span><span class="n">connection</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">DBHelper</span><span class="p">.</span><span class="na">getConnection</span><span class="p">();</span>
+<span class="w">        </span><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">Statement</span><span class="w"> </span><span class="n">statement</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">connection</span><span class="p">.</span><span class="na">createStatement</span><span class="p">();</span>
+<span class="w">            </span><span class="n">String</span><span class="w"> </span><span class="n">sql</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;select * from province&quot;</span><span class="p">;</span>
+<span class="w">            </span><span class="n">ResultSet</span><span class="w"> </span><span class="n">resultSetA</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">statement</span><span class="p">.</span><span class="na">executeQuery</span><span class="p">(</span><span class="n">sql</span><span class="p">);</span>
+<span class="w">            </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="n">resultSetA</span><span class="p">.</span><span class="na">next</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="n">String</span><span class="w"> </span><span class="n">city_code</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">resultSetA</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+<span class="w">                </span><span class="n">String</span><span class="w"> </span><span class="n">city_name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">resultSetA</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="mi">2</span><span class="p">);</span>
+<span class="w">                </span><span class="n">pro</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="n">city_code</span><span class="p">,</span><span class="w"> </span><span class="n">city_name</span><span class="p">);</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="n">SQLException</span><span class="w"> </span><span class="n">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">e</span><span class="p">.</span><span class="na">printStackTrace</span><span class="p">();</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">map</span><span class="p">(</span><span class="n">LongWritable</span><span class="w"> </span><span class="n">key</span><span class="p">,</span><span class="n">Text</span><span class="w"> </span><span class="n">value</span><span class="p">,</span><span class="n">Context</span><span class="w"> </span><span class="n">context</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">IOException</span><span class="p">,</span><span class="w"> </span><span class="n">InterruptedException</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="n">String</span><span class="w"> </span><span class="n">line</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">value</span><span class="p">.</span><span class="na">toString</span><span class="p">();</span>
+<span class="w">        </span><span class="c1">//解析json数据</span>
+<span class="w">        </span><span class="n">JSONObject</span><span class="w"> </span><span class="n">jsonObject</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">JSONObject</span><span class="p">.</span><span class="na">parseObject</span><span class="p">(</span><span class="n">line</span><span class="p">);</span>
+<span class="w">        </span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">String</span><span class="o">[</span><span class="mi">14</span><span class="o">]</span><span class="p">;</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;id&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">1</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;company_name&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">2</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;eduLevel_name&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">3</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;emplType&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">4</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;jobName&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">String</span><span class="w"> </span><span class="n">salary</span><span class="o">=</span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;salary&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">salary</span><span class="p">.</span><span class="na">contains</span><span class="p">(</span><span class="s">&quot;K-&quot;</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">             </span><span class="n">Double</span><span class="w"> </span><span class="n">a</span><span class="w"> </span><span class="o">=</span><span class="n">Double</span><span class="p">.</span><span class="na">valueOf</span><span class="p">(</span><span class="n">salary</span><span class="p">.</span><span class="na">substring</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="n">salary</span><span class="p">.</span><span class="na">indexOf</span><span class="p">(</span><span class="s">&quot;K&quot;</span><span class="p">)));</span>
+<span class="w">             </span><span class="n">Double</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">=</span><span class="n">Double</span><span class="p">.</span><span class="na">valueOf</span><span class="p">(</span><span class="n">salary</span><span class="p">.</span><span class="na">substring</span><span class="p">(</span><span class="n">salary</span><span class="p">.</span><span class="na">indexOf</span><span class="p">(</span><span class="s">&quot;-&quot;</span><span class="p">)</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="n">salary</span><span class="p">.</span><span class="na">lastIndexOf</span><span class="p">(</span><span class="s">&quot;K&quot;</span><span class="p">)));</span>
+<span class="w">            </span><span class="n">data</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="o">+</span><span class="n">b</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="o">+</span><span class="s">&quot;&quot;</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">data</span><span class="o">[</span><span class="mi">5</span><span class="o">]=</span><span class="s">&quot;0&quot;</span><span class="p">;</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">6</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;createDate&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">7</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;endDate&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">String</span><span class="w"> </span><span class="n">code</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;city_code&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="c1">//data[8] = pro.get(code);</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">8</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">code</span><span class="p">;</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">9</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;companySize&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">10</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;welfare&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">11</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;responsibility&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">12</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;place&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">data</span><span class="o">[</span><span class="mi">13</span><span class="o">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">jsonObject</span><span class="p">.</span><span class="na">getString</span><span class="p">(</span><span class="s">&quot;workingExp&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="c1">//循环判空</span>
+<span class="w">        </span><span class="k">for</span><span class="p">(</span><span class="n">String</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="p">:</span><span class="w"> </span><span class="n">data</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="k">if</span><span class="p">(</span><span class="n">i</span><span class="o">==</span><span class="kc">null</span><span class="o">||</span><span class="n">i</span><span class="p">.</span><span class="na">equals</span><span class="p">(</span><span class="s">&quot;&quot;</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">                </span><span class="k">return</span><span class="p">;</span>
+<span class="w">            </span><span class="p">}</span>
+<span class="w">        </span><span class="p">}</span>
+<span class="w">        </span><span class="n">String</span><span class="w"> </span><span class="n">columnFamily</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;info&quot;</span><span class="p">;</span>
+<span class="w">        </span><span class="n">put</span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Put</span><span class="p">(</span><span class="n">data</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;company_name&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">1</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;eduLevel_name&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">2</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;emplType&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">3</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;jobName&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">4</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;salary&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;createDate&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">6</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;endDate&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">7</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;city_name&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">8</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;companySize&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">9</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;welfare&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">10</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;responsibility&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">11</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;place&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">12</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">put</span><span class="p">.</span><span class="na">addColumn</span><span class="p">(</span><span class="n">columnFamily</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="s">&quot;workingExp&quot;</span><span class="p">.</span><span class="na">getBytes</span><span class="p">(),</span><span class="w"> </span><span class="n">data</span><span class="o">[</span><span class="mi">13</span><span class="o">]</span><span class="p">.</span><span class="na">getBytes</span><span class="p">());</span>
+<span class="w">        </span><span class="n">context</span><span class="p">.</span><span class="na">write</span><span class="p">(</span><span class="n">NullWritable</span><span class="p">.</span><span class="na">get</span><span class="p">(),</span><span class="w"> </span><span class="n">put</span><span class="p">);</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">    </span><span class="cm">/********** end **********/</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>代码说明：</strong><br>
+<code>JsonMap</code> 是一个 MapReduce Mapper，负责解析 JSON 格式的招聘数据并写入 HBase 表。  </p>
+<ol>
+<li><strong><code>setup()</code></strong> — 任务启动时通过 <code>DBHelper.getConnection()</code> 连接 MySQL，将 <code>province</code> 表（城市编码 → 城市名称）加载到内存缓存 <code>pro</code> 中。  </li>
+<li><strong><code>map()</code></strong> — 对每行 JSON 依次执行：<br>
+   - 用 FastJSON 解析文本行为 <code>JSONObject</code>；<br>
+   - 提取 id、公司名称、学历要求等 14 个字段；<br>
+   - 薪资特殊处理：若包含 <code>"K-"</code> 则取上下限的平均值，否则置为 <code>"0"</code>；<br>
+   - 遍历数组判空，任一字段为空则跳过该行；<br>
+   - 构造 HBase 的 <code>Put</code> 对象，以 id 为行键，<code>info</code> 列族下写入所有字段；<br>
+   - 通过 <code>context.write()</code> 将 Put 输出到 HBase。  </li>
+</ol>
+<h3 id="jsontestjava">JsonTest.java</h3>
+<div class="codehilite"><pre><span></span><code><span class="kn">package</span><span class="w"> </span><span class="nn">com</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.conf.Configuration</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.fs.Path</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.hbase.HBaseConfiguration</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.hbase.TableName</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.hbase.client.ColumnFamilyDescriptor</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.hbase.client.Connection</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.hbase.client.TableDescriptorBuilder</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.hbase.client.Admin</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.hbase.client.ConnectionFactory</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.hbase.util.Bytes</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.io.NullWritable</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.mapreduce.Job</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.mapreduce.lib.input.FileInputFormat</span><span class="p">;</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil</span><span class="p">;</span>
+
+<span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">JsonTest</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">public</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kt">void</span><span class="w"> </span><span class="nf">main</span><span class="p">(</span><span class="n">String</span><span class="o">[]</span><span class="w"> </span><span class="n">args</span><span class="p">)</span><span class="w"> </span><span class="kd">throws</span><span class="w"> </span><span class="n">Exception</span><span class="p">{</span>
+
+<span class="w">        </span><span class="n">Configuration</span><span class="w"> </span><span class="n">config</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">HBaseConfiguration</span><span class="p">.</span><span class="na">create</span><span class="p">();</span>
+<span class="w">        </span><span class="c1">//设置zookeeper的配置</span>
+<span class="w">        </span><span class="n">config</span><span class="p">.</span><span class="na">set</span><span class="p">(</span><span class="s">&quot;hbase.zookeeper.quorum&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;127.0.0.1&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Connection</span><span class="w"> </span><span class="n">connection</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ConnectionFactory</span><span class="p">.</span><span class="na">createConnection</span><span class="p">(</span><span class="n">config</span><span class="p">);</span>
+<span class="w">        </span><span class="n">Admin</span><span class="w"> </span><span class="n">admin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">connection</span><span class="p">.</span><span class="na">getAdmin</span><span class="p">();</span>
+<span class="w">        </span><span class="n">TableName</span><span class="w"> </span><span class="n">tableName</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TableName</span><span class="p">.</span><span class="na">valueOf</span><span class="p">(</span><span class="s">&quot;job&quot;</span><span class="p">);</span>
+<span class="w">        </span><span class="kt">boolean</span><span class="w"> </span><span class="n">isExists</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">admin</span><span class="p">.</span><span class="na">tableExists</span><span class="p">(</span><span class="n">tableName</span><span class="p">);</span>
+<span class="w">        </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">isExists</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">TableDescriptorBuilder</span><span class="w"> </span><span class="n">tableDescriptor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TableDescriptorBuilder</span><span class="p">.</span><span class="na">newBuilder</span><span class="p">(</span><span class="n">tableName</span><span class="p">);</span>
+<span class="w">            </span><span class="n">ColumnFamilyDescriptor</span><span class="w"> </span><span class="n">family</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ColumnFamilyDescriptorBuilder</span><span class="p">.</span><span class="na">newBuilder</span><span class="p">(</span><span class="n">Bytes</span><span class="p">.</span><span class="na">toBytes</span><span class="p">(</span><span class="s">&quot;info&quot;</span><span class="p">)).</span><span class="na">build</span><span class="p">();</span><span class="c1">// 构建列族对象</span>
+<span class="w">            </span><span class="n">tableDescriptor</span><span class="p">.</span><span class="na">setColumnFamily</span><span class="p">(</span><span class="n">family</span><span class="p">);</span><span class="w"> </span><span class="c1">// 设置列族</span>
+<span class="w">            </span><span class="n">admin</span><span class="p">.</span><span class="na">createTable</span><span class="p">(</span><span class="n">tableDescriptor</span><span class="p">.</span><span class="na">build</span><span class="p">());</span><span class="w"> </span><span class="c1">// 创建表</span>
+<span class="w">        </span><span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">            </span><span class="n">admin</span><span class="p">.</span><span class="na">disableTable</span><span class="p">(</span><span class="n">tableName</span><span class="p">);</span>
+<span class="w">            </span><span class="n">admin</span><span class="p">.</span><span class="na">deleteTable</span><span class="p">(</span><span class="n">tableName</span><span class="p">);</span>
+<span class="w">            </span><span class="n">TableDescriptorBuilder</span><span class="w"> </span><span class="n">tableDescriptor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">TableDescriptorBuilder</span><span class="p">.</span><span class="na">newBuilder</span><span class="p">(</span><span class="n">tableName</span><span class="p">);</span>
+<span class="w">            </span><span class="n">ColumnFamilyDescriptor</span><span class="w"> </span><span class="n">family</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ColumnFamilyDescriptorBuilder</span><span class="p">.</span><span class="na">newBuilder</span><span class="p">(</span><span class="n">Bytes</span><span class="p">.</span><span class="na">toBytes</span><span class="p">(</span><span class="s">&quot;info&quot;</span><span class="p">)).</span><span class="na">build</span><span class="p">();</span><span class="c1">// 构建列族对象</span>
+<span class="w">            </span><span class="n">tableDescriptor</span><span class="p">.</span><span class="na">setColumnFamily</span><span class="p">(</span><span class="n">family</span><span class="p">);</span><span class="w"> </span><span class="c1">// 设置列族</span>
+<span class="w">            </span><span class="n">admin</span><span class="p">.</span><span class="na">createTable</span><span class="p">(</span><span class="n">tableDescriptor</span><span class="p">.</span><span class="na">build</span><span class="p">());</span><span class="w"> </span><span class="c1">// 创建表</span>
+<span class="w">        </span><span class="p">}</span>
+
+<span class="w">        </span><span class="cm">/********** begin **********/</span>
+<span class="w">        </span><span class="n">Job</span><span class="w"> </span><span class="n">job</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Job</span><span class="p">.</span><span class="na">getInstance</span><span class="p">(</span><span class="n">config</span><span class="p">);</span>
+<span class="w">        </span><span class="n">job</span><span class="p">.</span><span class="na">setJarByClass</span><span class="p">(</span><span class="n">JsonTest</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="w">        </span><span class="n">job</span><span class="p">.</span><span class="na">setMapperClass</span><span class="p">(</span><span class="n">JsonMap</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="w">        </span><span class="n">job</span><span class="p">.</span><span class="na">setMapOutputKeyClass</span><span class="p">(</span><span class="n">NullWritable</span><span class="p">.</span><span class="na">class</span><span class="p">);</span>
+<span class="w">        </span><span class="c1">//只有map没有reduce，所以设置reduce的数目为0</span>
+<span class="w">        </span><span class="n">job</span><span class="p">.</span><span class="na">setNumReduceTasks</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="w">        </span><span class="c1">//设置数据的输入路径,没有使用参数，直接在程序中写入HDFS的路径</span>
+<span class="w">        </span><span class="n">FileInputFormat</span><span class="p">.</span><span class="na">setInputPaths</span><span class="p">(</span><span class="n">job</span><span class="p">,</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">Path</span><span class="p">(</span><span class="s">&quot;/root/data/data.json&quot;</span><span class="p">));</span>
+<span class="w">        </span><span class="c1">//驱动函数</span>
+<span class="w">        </span><span class="n">TableMapReduceUtil</span><span class="p">.</span><span class="na">initTableReducerJob</span><span class="p">(</span><span class="s">&quot;job&quot;</span><span class="p">,</span><span class="kc">null</span><span class="p">,</span><span class="w"> </span><span class="n">job</span><span class="p">);</span>
+<span class="w">        </span><span class="n">TableMapReduceUtil</span><span class="p">.</span><span class="na">addDependencyJars</span><span class="p">(</span><span class="n">job</span><span class="p">);</span>
+<span class="w">        </span><span class="n">job</span><span class="p">.</span><span class="na">waitForCompletion</span><span class="p">(</span><span class="kc">true</span><span class="p">);</span>
+<span class="w">        </span><span class="cm">/********** end **********/</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>代码说明：</strong><br>
+<code>JsonTest</code> 是 MapReduce 驱动类，负责创建 HBase 表并提交数据导入任务。  </p>
+<ol>
+<li><strong>HBase 表管理</strong> — 通过 <code>HBaseConfiguration</code> 连接 ZooKeeper，检查 <code>job</code> 表是否存在：不存在则创建，存在则删除重建，均包含 <code>info</code> 列族。  </li>
+<li><strong>MapReduce Job 配置</strong> — 设置 Mapper 为 <code>JsonMap</code>，Reducer 数为 0（不需要聚合）；输入路径为 HDFS 的 <code>/root/data/data.json</code>；通过 <code>TableMapReduceUtil.initTableReducerJob("job", null, job)</code> 将输出写入 HBase 的 <code>job</code> 表；提交任务等待完成。</li>
+</ol>
+</div>
+  </main>
+  <footer class="site-footer">
+    <p>&copy; 2026 - xhWang00</p>
+  </footer>
+</body>
+</html>
