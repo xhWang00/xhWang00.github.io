@@ -166,10 +166,9 @@ th {
 /* Code */
 .article-body code {
   font-family: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Courier New", monospace;
-  font-size: 0.875em;
+  font-size: 0.75em;
   background: #f4f4f4;
   border: 1px solid #000;
-  padding: 0.1em 0.3em;
 }
 
 .article-body pre {
