@@ -33,31 +33,20 @@ img {
 }
 
 table {
+  width: auto;
+  margin: 0 auto;
   border-collapse: collapse;
-  border-top: 4px solid #000;
-  border-bottom: 4px solid #000;
-  margin-left: auto;
-  margin-right: auto;
-  background-color: #fff;
+  border-top: 3px solid #000;
+  border-bottom: 3px solid #000;
 }
 
-td, th {
-  border: none;
+th, td {
   padding: 0.5em 1em;
 }
 
 th {
-  border-bottom: 1px solid #000;
-}
-
-tr, th, td {
-  border: none;
-  padding: 0.5em 1em;
-  background-color: #fff;
-}
-
-th {
-  border-bottom: 1px solid #000;
+  font-size: 1.25em;
+  border-bottom: 1px solid #000; 
 }
 
 /* Layout */
